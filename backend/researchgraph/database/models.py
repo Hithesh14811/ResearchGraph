@@ -63,6 +63,7 @@ class ResearchRun(Base):
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     iteration: Mapped[int] = mapped_column(Integer, default=0)
     auto_approve: Mapped[bool] = mapped_column(default=False)
+    mode: Mapped[str] = mapped_column(String(8), default="demo", server_default="demo")
     failure_scenarios: Mapped[list[Any]] = mapped_column(JSON, default=list)
     plan: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     critique: Mapped[dict[str, Any] | None] = mapped_column(JSON)

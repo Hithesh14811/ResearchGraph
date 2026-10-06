@@ -49,12 +49,14 @@ class ResearchRepository:
         question: str,
         auto_approve: bool,
         failure_scenarios: Iterable[str],
+        mode: str = "demo",
     ) -> ResearchRun:
         run = ResearchRun(
             id=research_id,
             question=question,
             status=RunStatus.PENDING.value,
             auto_approve=auto_approve,
+            mode=mode,
             failure_scenarios=sorted(failure_scenarios),
             metrics={},
             usage={},

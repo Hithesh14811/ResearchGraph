@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { relativeTime } from "../lib/format";
 import type { Run } from "../types/api";
-import { EmptyState, StatusBadge } from "./ui";
+import { EmptyState, Pill, StatusBadge } from "./ui";
 
 const COLUMNS = "grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_150px_64px_72px_64px_88px] items-center gap-x-4";
 
@@ -33,7 +33,10 @@ export function RunHistory({ runs, loading, total }: { runs: Run[]; loading: boo
               className={`${COLUMNS} border-b border-line px-4 py-3 last:border-b-0 hover:bg-surface-2`}
             >
               <span role="cell" className="min-w-0">
-                <span className="block truncate text-[13.5px] text-ink">{run.question}</span>
+                <span className="flex items-center gap-2">
+                  {run.mode === "live" && <Pill tone="ok" className="shrink-0">Live</Pill>}
+                  <span className="truncate text-[13.5px] text-ink">{run.question}</span>
+                </span>
                 <span className="mt-0.5 block font-mono text-[11px] text-faint">{run.id}</span>
               </span>
               <span role="cell">

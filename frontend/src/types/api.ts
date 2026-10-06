@@ -10,6 +10,8 @@ export type RunStatus =
   | "interrupted"
   | "rejected";
 
+export type RunMode = "demo" | "live";
+
 export const TERMINAL_STATUSES: RunStatus[] = ["completed", "failed", "cancelled", "rejected"];
 
 export interface ReportMetrics {
@@ -66,6 +68,7 @@ export interface Run {
   progress: number;
   iteration: number;
   auto_approve: boolean;
+  mode: RunMode;
   failure_scenarios: string[];
   metrics: RunMetrics;
   usage: Usage;
@@ -289,4 +292,6 @@ export interface Health {
   database: string;
   tracing_enabled: boolean;
   active_runs: number;
+  /** Present when a password-protected live lane runs next to the demo lane. */
+  live_mode: { llm_provider: string; model: string; search_provider: string } | null;
 }

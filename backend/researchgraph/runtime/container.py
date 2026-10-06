@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 import httpx
 
@@ -52,6 +53,15 @@ def _build_search(settings: Settings, client: httpx.AsyncClient) -> SearchServic
     return SearchService(web=web, academic=academic)
 
 
+@dataclass(frozen=True)
+class DemoLane:
+    """Offline demo services served next to a real provider when the live gate is on."""
+
+    settings: Settings
+    search: SearchService
+    fetcher: Fetcher
+
+
 class ServiceContainer:
     """Owns shared clients (HTTP, search, vector index, models) for the process lifetime."""
 
@@ -64,6 +74,7 @@ class ServiceContainer:
         index: EvidenceIndex,
         models: ModelRegistry | None,
         http_client: httpx.AsyncClient | None = None,
+        demo: DemoLane | None = None,
     ) -> None:
         self.settings = settings
         self.search = search
@@ -71,6 +82,7 @@ class ServiceContainer:
         self.index = index
         self._models = models
         self._http = http_client
+        self.demo = demo
 
     @classmethod
     def from_settings(cls, settings: Settings) -> ServiceContainer:
@@ -101,16 +113,44 @@ class ServiceContainer:
             settings.embedding_provider,
             settings.resolved_vector_store,
         )
+        demo = None
+        if settings.live_gate_enabled:
+            from researchgraph.demo.corpus import CorpusFetcher
+
+            demo_settings = settings.demo_variant()
+            demo = DemoLane(demo_settings, _build_search(demo_settings, http), CorpusFetcher())
+            logger.info(
+                "Live mode gate on: demo lane by default, live lane %s",
+                "unlocked by password" if settings.live_mode_available else "disabled",
+            )
         return cls(
-            settings, search=search, fetcher=fetcher, index=index, models=models, http_client=http
+            settings,
+            search=search,
+            fetcher=fetcher,
+            index=index,
+            models=models,
+            http_client=http,
+            demo=demo,
         )
 
-    def context_for_run(self, *, failures: frozenset[str] = frozenset()) -> ResearchContext:
+    def context_for_run(
+        self, *, failures: frozenset[str] = frozenset(), live: bool = True
+    ) -> ResearchContext:
+        """Build a run's context. ``live=False`` selects the demo lane when one exists."""
         faults: FaultInjector = NoFaults()
         if failures:
             from researchgraph.demo.faults import ScenarioFaultInjector
 
             faults = ScenarioFaultInjector(failures)
+        if self.demo is not None and not live:
+            return ResearchContext(
+                settings=self.demo.settings,
+                models=build_model_registry(self.demo.settings, faults=faults),
+                search=self.demo.search,
+                fetcher=self.demo.fetcher,
+                index=self.index,
+                faults=faults,
+            )
         models = (
             self._models
             if self._models is not None

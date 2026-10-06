@@ -142,6 +142,18 @@ class Settings(BaseSettings):
     resume_runs_on_startup: bool = True
     shutdown_drain_timeout_seconds: float = 20.0
 
+    # --- Live mode gate (public deployments) ---------------------------------------------------
+    public_demo: bool = Field(
+        default=False,
+        description="Public deployment: runs use the offline demo lane; real-provider runs need "
+        "LIVE_MODE_PASSWORD (and are impossible without it).",
+    )
+    live_mode_password: SecretStr | None = Field(
+        default=None,
+        description="Unlocks live (real-provider) runs alongside the demo lane.",
+    )
+    live_token_ttl_hours: float = Field(default=12.0, gt=0, le=168)
+
     # --- Demo / failure simulation -------------------------------------------------------------
     demo_failures: str = Field(
         default="",
@@ -162,6 +174,26 @@ class Settings(BaseSettings):
     @property
     def is_mock_llm(self) -> bool:
         return self.llm_provider == "mock"
+
+    @property
+    def live_gate_enabled(self) -> bool:
+        """Demo and live lanes side by side: demo by default, live only when unlocked."""
+        return not self.is_mock_llm and (self.public_demo or self.live_mode_password is not None)
+
+    @property
+    def live_mode_available(self) -> bool:
+        return self.live_gate_enabled and self.live_mode_password is not None
+
+    def demo_variant(self) -> Settings:
+        """The offline demo lane: mock model over the synthetic corpus."""
+        return self.model_copy(
+            update={
+                "llm_provider": "mock",
+                "model_name": "mock-research-model",
+                "fast_model_name": None,
+                "search_provider": "mock",
+            }
+        )
 
     @property
     def uses_postgres(self) -> bool:

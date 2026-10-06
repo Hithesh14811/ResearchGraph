@@ -4,11 +4,17 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 
 from researchgraph import __version__
 from researchgraph.api.deps import get_services, require_token
+from researchgraph.api.live_auth import (
+    AttemptLimiter,
+    issue_token,
+    password_matches,
+    verify_token,
+)
 from researchgraph.api.sse import event_stream
 from researchgraph.core.errors import InvalidRunStateError, RunNotFoundError
 from researchgraph.database.models import ResearchRun
@@ -24,10 +30,14 @@ from researchgraph.schemas.api import (
     FindingsResponse,
     GraphResponse,
     HealthResponse,
+    LiveAuthRequest,
+    LiveAuthResponse,
+    LiveModeInfo,
     PlanResponse,
     ReplanRequest,
     ReportResponse,
     RunListResponse,
+    RunMode,
     RunResponse,
     SourceItem,
     SourcesResponse,
@@ -39,6 +49,7 @@ from researchgraph.schemas.review import Critique, QualityAssessment
 from researchgraph.schemas.sources import Source, SourceQuality
 
 Services = Annotated[AppServices, Depends(get_services)]
+LiveToken = Annotated[str | None, Header(alias="X-Live-Token")]
 router = APIRouter(dependencies=[Depends(require_token)])
 public = APIRouter()
 
@@ -53,6 +64,7 @@ def _to_response(run: ResearchRun) -> RunResponse:
         progress=run.progress or 0.0,
         iteration=run.iteration or 0,
         auto_approve=run.auto_approve,
+        mode="live" if run.mode == "live" else "demo",
         failure_scenarios=list(run.failure_scenarios or []),
         metrics=run.metrics or {},
         usage=run.usage or {},
@@ -71,22 +83,85 @@ async def _get_run(services: AppServices, research_id: str) -> ResearchRun:
     return run
 
 
+def _require_live(services: AppServices, token: str | None) -> None:
+    """Live runs spend provider credits: only a valid token from POST /auth/live may start them."""
+    settings = services.settings
+    if not settings.live_mode_available or settings.live_mode_password is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Live mode is not enabled on this server")
+    if not verify_token(token, settings.live_mode_password.get_secret_value()):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Live mode is locked: unlock it with the password"
+        )
+
+
+def _resolve_mode(services: AppServices, requested: RunMode, token: str | None) -> RunMode:
+    settings = services.settings
+    if not settings.live_gate_enabled:  # a single lane: whatever the server is configured with
+        return "demo" if settings.is_mock_llm else "live"
+    if requested == "live":
+        _require_live(services, token)
+        return "live"
+    return "demo"
+
+
+async def _guard_live_run(services: AppServices, research_id: str, token: str | None) -> None:
+    """Resuming a live run spends credits too, so plan decisions on it need the token."""
+    run = await _get_run(services, research_id)
+    if run.mode == "live" and services.settings.live_gate_enabled:
+        _require_live(services, token)
+
+
+def _limiter(request: Request) -> AttemptLimiter:
+    limiter: AttemptLimiter | None = getattr(request.app.state, "live_limiter", None)
+    if limiter is None:
+        limiter = request.app.state.live_limiter = AttemptLimiter()
+    return limiter
+
+
 @public.get("/health", response_model=HealthResponse, tags=["system"])
 async def health(services: Services) -> HealthResponse:
     s = services.settings
+    lane = s.demo_variant() if s.live_gate_enabled else s  # what a run gets by default
     return HealthResponse(
         status="ok",
         version=__version__,
         environment=s.environment,
-        llm_provider=s.llm_provider,
-        model=s.model_name,
-        search_provider=s.search_provider,
+        llm_provider=lane.llm_provider,
+        model=lane.model_name,
+        search_provider=lane.search_provider,
         embedding_provider=s.embedding_provider,
         vector_store=s.resolved_vector_store,
         database="postgresql" if s.uses_postgres else "sqlite",
         tracing_enabled=services.tracing_enabled,
         active_runs=services.manager.active_count,
+        live_mode=LiveModeInfo(
+            llm_provider=s.llm_provider, model=s.model_name, search_provider=s.search_provider
+        )
+        if s.live_mode_available
+        else None,
     )
+
+
+@router.post("/auth/live", response_model=LiveAuthResponse, tags=["system"])
+async def unlock_live_mode(
+    body: LiveAuthRequest, request: Request, services: Services
+) -> LiveAuthResponse:
+    """Exchange the live mode password for a short-lived token (failed attempts are throttled)."""
+    settings = services.settings
+    if not settings.live_mode_available or settings.live_mode_password is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Live mode is not enabled on this server")
+    limiter = _limiter(request)
+    client = request.client.host if request.client else "unknown"
+    if limiter.blocked(client):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed attempts; try again later"
+        )
+    password = settings.live_mode_password.get_secret_value()
+    if not password_matches(body.password, password):
+        limiter.record_failure(client)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect password")
+    token, expires_at = issue_token(password, ttl_seconds=settings.live_token_ttl_hours * 3600)
+    return LiveAuthResponse(token=token, expires_at=expires_at)
 
 
 @router.get("/graph", response_model=GraphResponse, tags=["system"])
@@ -98,17 +173,19 @@ async def graph_diagram(services: Services) -> GraphResponse:
 @router.post(
     "/research", response_model=RunResponse, status_code=status.HTTP_202_ACCEPTED, tags=["research"]
 )
-async def create_research(body: CreateResearchRequest, services: Services) -> RunResponse:
+async def create_research(
+    body: CreateResearchRequest, services: Services, x_live_token: LiveToken = None
+) -> RunResponse:
+    mode = _resolve_mode(services, body.mode, x_live_token)
     requested = body.failure_scenarios or services.settings.demo_failures  # DEMO_FAILURES default
     failures = parse_scenarios(requested) if requested else frozenset()
-    if failures and not (
-        services.settings.is_mock_llm or failures <= {"failed_source", "insufficient_evidence"}
-    ):
-        raise InvalidRunStateError(
-            "LLM failure scenarios can only be simulated with LLM_PROVIDER=mock"
-        )
+    if failures and not (mode == "demo" or failures <= {"failed_source", "insufficient_evidence"}):
+        raise InvalidRunStateError("LLM failure scenarios can only be simulated in demo mode")
     research_id = await services.manager.create_run(
-        body.question, auto_approve=body.auto_approve, failure_scenarios=failures
+        body.question,
+        auto_approve=body.auto_approve,
+        failure_scenarios=failures,
+        live=mode == "live",
     )
     return _to_response(await _get_run(services, research_id))
 
@@ -141,20 +218,29 @@ async def get_plan(research_id: str, services: Services) -> PlanResponse:
 
 
 @router.post("/research/{research_id}/approve", response_model=RunResponse, tags=["plan"])
-async def approve_plan(research_id: str, services: Services) -> RunResponse:
+async def approve_plan(
+    research_id: str, services: Services, x_live_token: LiveToken = None
+) -> RunResponse:
+    await _guard_live_run(services, research_id, x_live_token)
     await services.manager.approve(research_id)
     return _to_response(await _get_run(services, research_id))
 
 
 @router.post("/research/{research_id}/edit-plan", response_model=RunResponse, tags=["plan"])
-async def edit_plan(research_id: str, body: EditPlanRequest, services: Services) -> RunResponse:
+async def edit_plan(
+    research_id: str, body: EditPlanRequest, services: Services, x_live_token: LiveToken = None
+) -> RunResponse:
+    await _guard_live_run(services, research_id, x_live_token)
     await services.manager.edit_plan(research_id, body.plan, approve=body.approve)
     return _to_response(await _get_run(services, research_id))
 
 
 @router.post("/research/{research_id}/replan", response_model=RunResponse, tags=["plan"])
-async def replan(research_id: str, body: ReplanRequest, services: Services) -> RunResponse:
+async def replan(
+    research_id: str, body: ReplanRequest, services: Services, x_live_token: LiveToken = None
+) -> RunResponse:
     """Regenerate the plan from natural-language reviewer feedback."""
+    await _guard_live_run(services, research_id, x_live_token)
     await services.manager.replan(research_id, body.feedback)
     return _to_response(await _get_run(services, research_id))
 

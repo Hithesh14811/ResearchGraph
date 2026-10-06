@@ -8,7 +8,7 @@ import { MetricsPanel } from "../components/MetricsPanel";
 import { PlanReview } from "../components/PlanReview";
 import { StageTrack } from "../components/StageTrack";
 import { WorkflowGraph } from "../components/WorkflowGraph";
-import { Button, StatusBadge, buttonClass } from "../components/ui";
+import { Button, Pill, StatusBadge, buttonClass } from "../components/ui";
 import { useArtifacts } from "../hooks/useArtifacts";
 import { useEventStream } from "../hooks/useEventStream";
 import { useRun } from "../hooks/useRun";
@@ -92,6 +92,7 @@ export function RunPage() {
           <div className="min-w-0 max-w-4xl">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted">
               <StatusBadge status={run.status} />
+              <Pill tone={run.mode === "live" ? "ok" : "neutral"}>{run.mode === "live" ? "Live" : "Demo"}</Pill>
               {run.current_stage && !terminal && (
                 <span>
                   in <span className="text-ink-2">{humanize(run.current_stage)}</span>

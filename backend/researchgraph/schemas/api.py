@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -14,6 +14,8 @@ from researchgraph.schemas.report import Citation, ReportMetrics, ResearchFindin
 from researchgraph.schemas.research import ResearchPlan
 from researchgraph.schemas.review import Critique, QualityAssessment
 from researchgraph.schemas.sources import Source, SourceQuality
+
+RunMode = Literal["demo", "live"]
 
 MAX_PAGE_SIZE = 500
 
@@ -29,6 +31,11 @@ class CreateResearchRequest(BaseModel):
         default_factory=list,
         max_length=6,
         description="Demo mode only: failures to simulate (or ['all']).",
+    )
+    mode: RunMode = Field(
+        default="demo",
+        description="With the live mode gate on: 'live' uses the real provider and needs a "
+        "token from POST /auth/live in the X-Live-Token header. Ignored otherwise.",
     )
 
     @field_validator("question")
@@ -62,6 +69,7 @@ class RunResponse(BaseModel):
     progress: float
     iteration: int
     auto_approve: bool
+    mode: RunMode
     failure_scenarios: list[str]
     metrics: dict[str, Any]
     usage: dict[str, Any]
@@ -134,6 +142,12 @@ class GraphResponse(BaseModel):
     mermaid: str
 
 
+class LiveModeInfo(BaseModel):
+    llm_provider: str
+    model: str
+    search_provider: str
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str
@@ -146,3 +160,18 @@ class HealthResponse(BaseModel):
     database: str
     tracing_enabled: bool
     active_runs: int
+    live_mode: LiveModeInfo | None = Field(
+        default=None,
+        description="Present when a password-protected live lane runs next to the demo lane.",
+    )
+
+
+class LiveAuthRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=1, max_length=256)
+
+
+class LiveAuthResponse(BaseModel):
+    token: str
+    expires_at: int = Field(description="Unix time at which the token stops working.")

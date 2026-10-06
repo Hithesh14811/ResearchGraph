@@ -24,7 +24,7 @@ request after a period of inactivity can take up to a minute while the server wa
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![PostgreSQL + pgvector](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
-![Tests: 112](https://img.shields.io/badge/tests-112-success)
+![Tests: 120](https://img.shields.io/badge/tests-120-success)
 ![mypy](https://img.shields.io/badge/types-mypy%20clean-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
@@ -74,7 +74,7 @@ Dashboard: `python scripts/serve.py`, then `cd frontend && npm install && npm ru
   `Last-Event-ID`, SSRF-safe fetching, bounded budgets, strict checkpoint deserialisation ([§14](#14-persistence-and-durability),
   [§17](#17-security), [§27](#27-failure-modes)).
 - **Measured, with honest limits.** Live evaluation with a real LLM and real papers (100 % citation coverage, 95 % of
-  behavioural checks, failures reported as-is); 112 tests including a real PostgreSQL + pgvector run
+  behavioural checks, failures reported as-is); 120 tests including a real PostgreSQL + pgvector run
   ([§15](#15-evaluation), [§28](#28-limitations)).
 
 ## Contents
@@ -526,6 +526,11 @@ treated as secondary sources (regression test included).
   whitelist.
 - **Input sanitisation** (NFKC, control characters) and Pydantic validation at the API.
 - Optional bearer-token auth (`API_TOKEN`, constant-time comparison); CORS allowlist; nginx security headers.
+- **Password-gated live mode** for public deployments (`PUBLIC_DEMO`, `LIVE_MODE_PASSWORD`): visitors get the offline
+  demo lane; the dashboard's Demo / Live switch exchanges the password for a short-lived HMAC-signed token
+  (`POST /auth/live`) that is required to start a live run *and* to approve, edit or replan one, since every one of
+  those spends provider credits. Failed attempts are throttled per client and globally; changing the password
+  revokes every token; with no password set, live runs are impossible.
 - A cap on concurrently executing runs (`MAX_ACTIVE_RUNS`, HTTP 429) bounds concurrent LLM spend.
 - Strict, allowlisted checkpoint deserialisation (see §5).
 
@@ -578,6 +583,7 @@ cp .env.example .env
 | `QUALITY_GATE_THRESHOLD` | 0.65 | Gate threshold |
 | `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT` | off | LangSmith tracing |
 | `API_TOKEN` | — | Require `Authorization: Bearer …` |
+| `PUBLIC_DEMO`, `LIVE_MODE_PASSWORD` | off | Demo lane by default; live (real-provider) runs only after unlocking with the password |
 | `DEMO_FAILURES` | — | Default failure scenarios for demo runs |
 
 The full list with comments is in [`.env.example`](.env.example). Example — Anthropic + real search:
@@ -662,14 +668,14 @@ methodology, removed claims and bibliography — is in [`docs/examples/sample-re
 ## 24. Testing
 
 ```bash
-pytest                                    # 111 offline tests (mock LLM, synthetic corpus, mocked HTTP)
+pytest                                    # 119 offline tests (mock LLM, synthetic corpus, mocked HTTP)
 TEST_DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/db pytest -m postgres
 ruff check backend scripts evaluation && ruff format --check backend scripts evaluation
 mypy                                      # clean
 cd frontend && npm run build              # strict TypeScript + production build
 ```
 
-112 tests (84 unit, 28 integration), no real API calls:
+120 tests (84 unit, 36 integration), no real API calls:
 
 - **Unit:** text utilities, schemas and reducers (merge semantics, frozen models, strict serde round-trip), document
   parsing (PDF/HTML/Markdown, malformed input), cleaning (heading and hyphenation regressions), SSRF and fetch limits,
@@ -678,7 +684,7 @@ cd frontend && npm run build              # strict TypeScript + production build
   scoping, search caching/coalescing, provider response parsing, fault injection, `.env.example`.
 - **Integration:** full workflow for every sample question with provenance invariants, each failure scenario, HITL
   interrupt/edit/replan/cancel across a simulated restart, the HTTP API end to end (including SSE replay and
-  `Last-Event-ID`), the active-run limit (429) and concurrent approvals (exactly one wins), drain-on-shutdown +
+  `Last-Event-ID`), the password-gated live mode (tokens, throttling, guarded plan approval), the active-run limit (429) and concurrent approvals (exactly one wins), drain-on-shutdown +
   resume-on-startup, and a full run on PostgreSQL + pgvector.
 
 CI (GitHub Actions) runs lint, format, mypy and tests; Postgres integration against a `pgvector/pgvector` service;

@@ -125,15 +125,22 @@ class RunManager:
         *,
         auto_approve: bool = False,
         failure_scenarios: frozenset[str] = frozenset(),
+        live: bool | None = None,
     ) -> str:
+        """Start a run. ``live`` picks the lane; None means the configured provider."""
         self._check_capacity()
+        if live is None:
+            live = not self.settings.is_mock_llm
         research_id = new_research_id()
         await self.repo.create_run(
             research_id=research_id,
             question=question,
             auto_approve=auto_approve,
             failure_scenarios=failure_scenarios,
+            mode="live" if live else "demo",
         )
+        if live and self.settings.live_gate_enabled:
+            logger.info("Live run %s started (unlocked with the live mode password)", research_id)
         await self._emit(
             research_id,
             EventType.RUN_STATUS,
@@ -145,7 +152,7 @@ class RunManager:
             "original_question": question,
             "auto_approve": auto_approve,
         }
-        self._start(research_id, graph_input, failure_scenarios)
+        self._start(research_id, graph_input, failure_scenarios, live=live)
         return research_id
 
     async def get_plan(self, research_id: str) -> ResearchPlan | None:
@@ -205,6 +212,7 @@ class RunManager:
                         "auto_approve": run.auto_approve,
                     },
                     failures,
+                    live=run.mode == "live",
                 )
                 continue
             if snapshot.interrupts:
@@ -221,7 +229,7 @@ class RunManager:
                 status=RunStatus.RUNNING.value,
                 next=list(snapshot.next),
             )
-            self._start(run.id, None, failures)
+            self._start(run.id, None, failures, live=run.mode == "live")
 
     async def shutdown(self, drain_timeout: float | None = None) -> None:
         """Ask every running graph to stop at the next superstep boundary (checkpoint saved)."""
@@ -258,7 +266,9 @@ class RunManager:
             config["callbacks"] = [tracker]
         return config
 
-    def _start(self, research_id: str, graph_input: Any, failures: frozenset[str]) -> None:
+    def _start(
+        self, research_id: str, graph_input: Any, failures: frozenset[str], *, live: bool
+    ) -> None:
         if research_id in self._active:
             raise InvalidRunStateError("Run is already executing")
         tracker = UsageTracker(
@@ -267,7 +277,7 @@ class RunManager:
         )
         control = RunControl()
         context = self._contexts.get(research_id) or self.container.context_for_run(
-            failures=failures
+            failures=failures, live=live
         )
         self._contexts[research_id] = context
         task = asyncio.create_task(
@@ -325,6 +335,7 @@ class RunManager:
             research_id,
             Command(resume=decision.model_dump(mode="json")),
             frozenset(run.failure_scenarios or []),
+            live=run.mode == "live",
         )
 
     async def _load_view(self, research_id: str) -> _RunView:

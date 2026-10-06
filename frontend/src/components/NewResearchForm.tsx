@@ -2,6 +2,7 @@ import { CornerDownRight, Loader2 } from "lucide-react";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useMode } from "../lib/mode";
 import { api } from "../services/api";
 import { Button, cx } from "./ui";
 
@@ -31,6 +32,7 @@ const FAILURES = [
 
 export function NewResearchForm({ demoMode }: { demoMode: boolean }) {
   const navigate = useNavigate();
+  const { mode, health } = useMode();
   const [question, setQuestion] = useState("");
   const [requireApproval, setRequireApproval] = useState(true);
   const [failures, setFailures] = useState<string[]>([]);
@@ -46,7 +48,7 @@ export function NewResearchForm({ demoMode }: { demoMode: boolean }) {
     setSubmitting(true);
     setError(null);
     try {
-      const run = await api.createRun(question.trim(), !requireApproval, failures);
+      const run = await api.createRun(question.trim(), !requireApproval, demoMode ? failures : [], mode);
       navigate(`/runs/${run.id}`);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : String(exc));
@@ -112,6 +114,13 @@ export function NewResearchForm({ demoMode }: { demoMode: boolean }) {
             ))}
           </div>
         </fieldset>
+      )}
+
+      {mode === "live" && (
+        <p className="border-t border-line bg-ok-soft px-4 py-2.5 text-[12.5px] text-ink-2">
+          <span className="font-medium text-ok">Live mode.</span> This run uses {health?.live_mode?.model ?? "a real model"} and real
+          academic search. Expect several minutes per run.
+        </p>
       )}
 
       {error && <p className="mx-4 mb-3 rounded-md bg-bad-soft px-3 py-2 text-[13px] text-bad">{error}</p>}

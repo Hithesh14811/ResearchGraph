@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 
 import { NewResearchForm } from "../components/NewResearchForm";
 import { RunHistory } from "../components/RunHistory";
+import { useMode } from "../lib/mode";
 import { STAGES } from "../lib/workflow";
 import { api } from "../services/api";
-import { TERMINAL_STATUSES, type Health, type Run } from "../types/api";
+import { TERMINAL_STATUSES, type Run } from "../types/api";
 
 const ACTIVE_POLL_MS = 2500;
 const IDLE_POLL_MS = 15000;
 
-function PipelineCard({ demoMode }: { demoMode: boolean }) {
+function PipelineCard({ demoMode, liveAvailable }: { demoMode: boolean; liveAvailable: boolean }) {
   return (
     <section className="rounded-lg border border-line bg-surface">
       <header className="flex min-h-11 items-center border-b border-line px-4 py-2">
@@ -28,8 +29,15 @@ function PipelineCard({ demoMode }: { demoMode: boolean }) {
       {demoMode && (
         <p className="border-t border-line bg-surface-2 px-4 py-3 text-[12.5px] leading-relaxed text-muted">
           <span className="font-medium text-ink-2">Demo mode.</span> A deterministic mock model researches a synthetic, clearly labelled
-          corpus. Set <code className="font-mono text-[11.5px] text-ink-2">LLM_PROVIDER</code> and{" "}
-          <code className="font-mono text-[11.5px] text-ink-2">SEARCH_PROVIDER</code> to research the live web.
+          corpus.{" "}
+          {liveAvailable ? (
+            <>Switch to Live in the header (password required) to research with a real model.</>
+          ) : (
+            <>
+              Set <code className="font-mono text-[11.5px] text-ink-2">LLM_PROVIDER</code> and{" "}
+              <code className="font-mono text-[11.5px] text-ink-2">SEARCH_PROVIDER</code> to research the live web.
+            </>
+          )}
         </p>
       )}
     </section>
@@ -40,11 +48,7 @@ export function DashboardPage() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [health, setHealth] = useState<Health | null>(null);
-
-  useEffect(() => {
-    void api.health().then(setHealth).catch(() => setHealth(null));
-  }, []);
+  const { health, mode, liveAvailable } = useMode();
 
   // Self-scheduling poll: fast while a run is executing, slow otherwise.
   useEffect(() => {
@@ -75,7 +79,7 @@ export function DashboardPage() {
     };
   }, []);
 
-  const demoMode = health?.llm_provider === "mock";
+  const demoMode = health?.llm_provider === "mock" && mode === "demo";
 
   return (
     <div className="space-y-8">
@@ -88,7 +92,7 @@ export function DashboardPage() {
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         <NewResearchForm demoMode={demoMode} />
-        <PipelineCard demoMode={demoMode} />
+        <PipelineCard demoMode={demoMode} liveAvailable={liveAvailable} />
       </div>
       <RunHistory runs={runs} loading={loading} total={total} />
     </div>
