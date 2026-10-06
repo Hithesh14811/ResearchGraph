@@ -13,6 +13,11 @@ Ask a complex question. ResearchGraph plans the research, investigates subquesti
 extracts quote-verified evidence, critiques its own analysis, loops back when evidence is weak, and publishes a report in
 which **every sentence is tied to a stored, verifiable source.**
 
+**[Live demo](https://researchgraph-z8r1.onrender.com)** · [API docs](https://researchgraph-api-n4ij.onrender.com/docs)
+
+<sub>Demo mode: deterministic mock model and synthetic corpus, no API keys. Hosted on a free tier, so the first
+request after a period of inactivity can take up to a minute while the server wakes up.</sub>
+
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![LangGraph 1.2](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)
 ![LangChain 1.x](https://img.shields.io/badge/LangChain-1.x-1C3C3C)
