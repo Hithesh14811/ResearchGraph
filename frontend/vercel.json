@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://researchgraph-api-n4ij.onrender.com/:path*" },
+    { "source": "/openapi.json", "destination": "https://researchgraph-api-n4ij.onrender.com/openapi.json" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
