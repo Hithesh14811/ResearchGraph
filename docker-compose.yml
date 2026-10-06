@@ -1,0 +1,57 @@
+# ResearchGraph: PostgreSQL (+pgvector) · FastAPI/LangGraph backend · React dashboard.
+#
+#   cp .env.example .env        # optional: add LLM / search API keys
+#   docker compose up --build
+#   open http://localhost:8080  (API docs: http://localhost:8000/docs)
+#
+# With no API keys the stack runs in offline demo mode (mock model + synthetic corpus).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: researchgraph
+      POSTGRES_PASSWORD: researchgraph
+      POSTGRES_DB: researchgraph
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U researchgraph -d researchgraph"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Overrides any DATABASE_URL in .env so the container always uses the compose database.
+      DATABASE_URL: postgresql+psycopg://researchgraph:researchgraph@postgres:5432/researchgraph
+      VECTOR_STORE: pgvector
+      CORS_ORIGINS: http://localhost:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    # Gives in-flight research runs time to drain to a checkpoint on `docker compose stop`.
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -1,0 +1,245 @@
+@import "tailwindcss";
+
+/* Design tokens. Every colour in the UI comes from these variables, so light and dark themes
+   are a single swap. One accent (ink blue) is reserved for interaction and live state;
+   green/amber/red appear only where they carry meaning (verified, warning, failure). */
+:root {
+  --sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --serif: "Source Serif 4 Variable", "Iowan Old Style", Georgia, serif;
+
+  --bg: #f6f6f3;
+  --surface: #ffffff;
+  --surface-2: #fafaf8;
+  --line: #e5e4df;
+  --line-strong: #d3d2cc;
+  --ink: #17171a;
+  --ink-2: #3c3c43;
+  --muted: #6e6e76;
+  --faint: #a2a2a9;
+  --accent: #2f4fc4;
+  --accent-ink: #ffffff;
+  --accent-soft: #eef1fc;
+  --ok: #17784b;
+  --ok-soft: #e8f5ee;
+  --warn: #9a5a00;
+  --warn-soft: #fcf3e3;
+  --bad: #be2f2f;
+  --bad-soft: #fcecec;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e0e10;
+    --surface: #151517;
+    --surface-2: #1a1a1d;
+    --line: #27272b;
+    --line-strong: #37373d;
+    --ink: #ededef;
+    --ink-2: #c6c6cc;
+    --muted: #8d8d96;
+    --faint: #5c5c64;
+    --accent: #8ba3ff;
+    --accent-ink: #0e0e10;
+    --accent-soft: rgb(139 163 255 / 0.12);
+    --ok: #4cc38a;
+    --ok-soft: rgb(76 195 138 / 0.12);
+    --warn: #e9a23b;
+    --warn-soft: rgb(233 162 59 / 0.12);
+    --bad: #f0716b;
+    --bad-soft: rgb(240 113 107 / 0.12);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e0e10;
+  --surface: #151517;
+  --surface-2: #1a1a1d;
+  --line: #27272b;
+  --line-strong: #37373d;
+  --ink: #ededef;
+  --ink-2: #c6c6cc;
+  --muted: #8d8d96;
+  --faint: #5c5c64;
+  --accent: #8ba3ff;
+  --accent-ink: #0e0e10;
+  --accent-soft: rgb(139 163 255 / 0.12);
+  --ok: #4cc38a;
+  --ok-soft: rgb(76 195 138 / 0.12);
+  --warn: #e9a23b;
+  --warn-soft: rgb(233 162 59 / 0.12);
+  --bad: #f0716b;
+  --bad-soft: rgb(240 113 107 / 0.12);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+  --font-serif: var(--serif);
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  @apply bg-bg font-sans text-[14px] text-ink antialiased;
+  font-feature-settings: "ss02";
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--ink);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+/* Rendered research report: set like a paper, not a chat transcript. */
+.report-prose {
+  @apply mx-auto max-w-[72ch] font-serif text-[16.5px] leading-[1.7] text-ink-2;
+}
+.report-prose h1 {
+  @apply mb-6 font-serif text-[30px] leading-tight font-semibold tracking-[-0.01em] text-ink;
+}
+.report-prose h2 {
+  @apply mt-10 mb-3 font-serif text-[21px] leading-snug font-semibold text-ink;
+}
+.report-prose h3 {
+  @apply mt-7 mb-2 font-serif text-[17px] font-semibold text-ink;
+}
+.report-prose p {
+  @apply my-3.5;
+}
+.report-prose ul,
+.report-prose ol {
+  @apply my-3.5 space-y-1.5 pl-6;
+}
+.report-prose ul {
+  @apply list-disc;
+}
+.report-prose ol {
+  @apply list-decimal;
+}
+.report-prose li::marker {
+  color: var(--faint);
+}
+.report-prose strong {
+  @apply font-semibold text-ink;
+}
+.report-prose blockquote {
+  @apply my-5 border-l-2 border-line-strong pl-4 text-muted italic;
+}
+.report-prose a.citation {
+  @apply ml-[1px] align-super font-sans text-[10.5px] font-semibold text-accent no-underline hover:underline;
+}
+.report-prose a {
+  @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
+}
+.report-prose del {
+  @apply text-faint;
+}
+.report-prose code {
+  @apply rounded bg-surface-2 px-1 py-0.5 font-mono text-[13px] ring-1 ring-line;
+}
+.report-prose table {
+  @apply my-5 w-full border-collapse font-sans text-[13.5px];
+}
+.report-prose th {
+  @apply border-b border-line-strong py-2 pr-4 text-left font-medium text-ink;
+}
+.report-prose td {
+  @apply border-b border-line py-2 pr-4 align-top;
+}
+.report-prose hr {
+  @apply my-8 border-line;
+}
+
+@media print {
+  @page {
+    margin: 18mm;
+  }
+  /* Paper is always light: these selectors match the dark-theme ones' specificity and come
+     later, so a report printed from dark mode is still black on white. */
+  :root,
+  :root[data-theme="dark"],
+  :root:not([data-theme="light"]) {
+    --bg: #fff;
+    --surface: #fff;
+    --surface-2: #f6f6f6;
+    --ink: #000;
+    --ink-2: #111;
+    --muted: #444;
+    --faint: #777;
+    --line: #ccc;
+    --line-strong: #999;
+    --accent: #1f3a9e;
+    --accent-soft: transparent;
+    color-scheme: light;
+  }
+  body {
+    background: white !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0;
+    max-width: none;
+    padding: 0;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

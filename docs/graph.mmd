@@ -1,0 +1,61 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	intake(intake)
+	planner(planner)
+	plan_review(plan_review)
+	query_generation(query_generation)
+	source_evaluation(source_evaluation)
+	contradiction_detection(contradiction_detection)
+	synthesis(synthesis)
+	critic(critic)
+	quality_gate(quality_gate)
+	report_writer(report_writer)
+	citation_verification(citation_verification)
+	citation_repair(citation_repair)
+	final_review(final_review)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> intake;
+	citation_repair --> citation_verification;
+	citation_verification -.-> citation_repair;
+	citation_verification -.-> final_review;
+	contradiction_detection --> synthesis;
+	critic --> quality_gate;
+	intake -.-> __end__;
+	intake -.-> planner;
+	plan_review -.-> __end__;
+	plan_review -.-> planner;
+	plan_review -.-> query_generation;
+	planner --> plan_review;
+	quality_gate -.-> query_generation;
+	quality_gate -.-> report_writer;
+	query_generation -.-> research_worker____start__;
+	query_generation -.-> source_evaluation;
+	report_writer --> citation_verification;
+	research_worker__evidence_extraction --> source_evaluation;
+	source_evaluation -.-> contradiction_detection;
+	source_evaluation -.-> query_generation;
+	synthesis --> critic;
+	final_review --> __end__;
+	plan_review -.-> plan_review;
+	subgraph research_worker
+	research_worker____start__(<p>__start__</p>)
+	research_worker__search_agent(search_agent)
+	research_worker__execute_tools(execute_tools)
+	research_worker__source_processing(source_processing)
+	research_worker__passage_retrieval(passage_retrieval)
+	research_worker__evidence_extraction(evidence_extraction)
+	research_worker____start__ --> research_worker__search_agent;
+	research_worker__execute_tools --> research_worker__search_agent;
+	research_worker__passage_retrieval --> research_worker__evidence_extraction;
+	research_worker__search_agent -.-> research_worker__execute_tools;
+	research_worker__search_agent -.-> research_worker__source_processing;
+	research_worker__source_processing --> research_worker__passage_retrieval;
+	end
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

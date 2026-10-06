@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="ResearchGraph — an evidence-driven research agent built on LangGraph" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>ResearchGraph</title>
+    <script>
+      // Apply a saved theme before first paint so the page never flashes the wrong colours.
+      try {
+        const theme = localStorage.getItem("rg-theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {
+        /* storage unavailable: follow the system theme */
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

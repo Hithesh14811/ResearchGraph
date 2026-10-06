@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "researchgraph"
+version = "0.1.0"
+description = "ResearchGraph — an autonomous, evidence-driven research agent built on LangGraph."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Hithesh" }]
+classifiers = [
+  "Programming Language :: Python :: 3.12",
+  "Framework :: FastAPI",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "langgraph>=1.2,<2",
+  "langgraph-checkpoint-sqlite>=3.1",
+  "langgraph-checkpoint-postgres>=3.1",
+  "langchain>=1.4,<2",
+  "langchain-core>=1.6,<2",
+  "langchain-text-splitters>=1.1",
+  "pydantic>=2.9,<3",
+  "pydantic-settings>=2.6",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "sqlalchemy[asyncio]>=2.0.36",
+  "aiosqlite>=0.20",
+  "psycopg[binary,pool]>=3.2",
+  "httpx>=0.28",
+  "pypdf>=5.0",
+  "beautifulsoup4>=4.12",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+openai = ["langchain-openai>=1.0"]
+anthropic = ["langchain-anthropic>=1.0"]
+pgvector = ["langchain-postgres>=0.0.15", "pgvector>=0.3"]
+all = ["researchgraph[openai,anthropic,pgvector]"]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "ruff>=0.8",
+  "mypy>=1.13",
+]
+
+[project.scripts]
+researchgraph-api = "researchgraph.main:run"
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["researchgraph*"]
+
+[tool.setuptools.package-data]
+researchgraph = ["py.typed", "demo/corpus/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "postgres: requires a PostgreSQL database (set TEST_DATABASE_URL)",
+]
+filterwarnings = [
+  "ignore::DeprecationWarning:aiosqlite.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["backend", "."]
+
+[tool.ruff.format]
+exclude = ["*.md"]  # code snippets in the docs are hand-aligned for reading
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "C4", "PIE"]
+ignore = [
+  "E501",    # long strings in prompts are clearer unwrapped
+  "RUF001",  # typographic characters are intentional in report text
+  "RUF002",
+  "RUF003",
+  "B008",    # FastAPI Depends() in defaults is idiomatic
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["researchgraph", "evaluation", "scripts"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+no_implicit_optional = true
+files = ["backend/researchgraph"]

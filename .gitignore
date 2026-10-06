@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Local data & generated output
+.env
+data/
+demo_output/
+evaluation/results/*
+!evaluation/results/.gitkeep
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
