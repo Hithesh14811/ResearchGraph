@@ -106,6 +106,7 @@ async def test_resuming_a_live_run_needs_the_token(
     assert (await client.post(f"/research/{research_id}/approve")).status_code == 401
     feedback = {"feedback": "add a subquestion on cost"}
     assert (await client.post(f"/research/{research_id}/replan", json=feedback)).status_code == 401
+    assert (await client.post(f"/research/{research_id}/cancel")).status_code == 401
     approved = await client.post(f"/research/{research_id}/approve", headers=headers)
     assert approved.status_code == 200
     await wait_for_status(services, research_id, RunStatus.COMPLETED)
@@ -122,6 +123,38 @@ async def test_password_guessing_is_throttled(
     assert codes == [401] * 5 + [429]
     # Even the right password is refused while throttled.
     assert (await client.post("/auth/live", json={"password": PASSWORD})).status_code == 429
+
+
+async def test_throttling_behind_a_proxy_ignores_spoofed_forwarded_for(tmp_path: Path) -> None:
+    settings = _gated_settings(tmp_path, trusted_proxy_hops=1)
+    async with open_services(settings, recover=False) as services:
+        app = create_app(settings)
+        app.state.services = services
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+
+            async def attempt(forwarded_for: str) -> int:
+                response = await client.post(
+                    "/auth/live",
+                    json={"password": "wrong"},
+                    headers={"X-Forwarded-For": forwarded_for},
+                )
+                return response.status_code
+
+            # The proxy appends the real address; a fresh fake prefix each time doesn't help.
+            codes = [await attempt(f"10.0.0.{i}, 203.0.113.7") for i in range(6)]
+            assert codes == [401] * 5 + [429]
+            assert await attempt("10.0.0.99, 198.51.100.2") == 401  # a different real client
+
+
+async def test_seeded_demo_run_uses_the_demo_lane_once(tmp_path: Path) -> None:
+    settings = _gated_settings(tmp_path, seed_demo_run=True)
+    async with open_services(settings, recover=False) as services:
+        runs, total = await services.repository.list_runs(limit=5, offset=0)
+        assert total == 1 and runs[0].mode == "demo" and runs[0].auto_approve
+        await wait_for_status(services, runs[0].id, RunStatus.COMPLETED)
+    async with open_services(settings, recover=False) as services:  # restart: no second seed
+        assert (await services.repository.list_runs(limit=5, offset=0))[1] == 1
 
 
 async def test_public_demo_without_password_never_runs_live(tmp_path: Path) -> None:

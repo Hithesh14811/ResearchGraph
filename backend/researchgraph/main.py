@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from researchgraph import __version__
 from researchgraph.api.routes import public, router
@@ -26,6 +28,39 @@ from researchgraph.runtime.bootstrap import open_services
 logger = logging.getLogger(__name__)
 
 MAX_REQUEST_BYTES = 256 * 1024
+_TOO_LARGE = "Request body too large"
+
+
+class BodySizeLimitMiddleware:
+    """Rejects request bodies over ``max_bytes``: up front when Content-Length declares it, and
+    while reading when it doesn't (chunked uploads)."""
+
+    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        length = Headers(scope=scope).get("content-length")
+        if length and length.isdigit() and int(length) > self.max_bytes:
+            response = JSONResponse(status_code=413, content={"detail": _TOO_LARGE})
+            await response(scope, receive, send)
+            return
+        received = 0
+
+        async def limited_receive() -> Message:
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    # FastAPI re-raises HTTPExceptions from body parsing, so this becomes a 413.
+                    raise HTTPException(status_code=413, detail=_TOO_LARGE)
+            return message
+
+        await self.app(scope, limited_receive, send)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -50,21 +85,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Autonomous, evidence-driven research agent built on LangGraph.",
         lifespan=lifespan,
     )
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=MAX_REQUEST_BYTES)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_methods=["GET", "POST"],
         allow_headers=["Authorization", "Content-Type", "Last-Event-ID", "X-Live-Token"],
     )
-
-    @app.middleware("http")
-    async def limit_body_size(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        length = request.headers.get("content-length")
-        if length and length.isdigit() and int(length) > MAX_REQUEST_BYTES:
-            return JSONResponse(status_code=413, content={"detail": "Request body too large"})
-        return await call_next(request)
 
     @app.exception_handler(RunNotFoundError)
     async def _not_found(_: Request, exc: RunNotFoundError) -> JSONResponse:

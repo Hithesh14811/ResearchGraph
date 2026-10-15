@@ -68,6 +68,8 @@ async def open_services(
             )
             if settings.resume_runs_on_startup if recover is None else recover:
                 await manager.recover()
+            if settings.seed_demo_run:
+                await manager.seed_demo_run()
             try:
                 yield services
             finally:

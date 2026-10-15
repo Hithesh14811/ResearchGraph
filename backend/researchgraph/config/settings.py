@@ -153,6 +153,19 @@ class Settings(BaseSettings):
         description="Unlocks live (real-provider) runs alongside the demo lane.",
     )
     live_token_ttl_hours: float = Field(default=12.0, gt=0, le=168)
+    trusted_proxy_hops: int = Field(
+        default=0,
+        ge=0,
+        le=5,
+        description="Reverse proxies in front of the API that append to X-Forwarded-For (e.g. 1 "
+        "behind a hosting load balancer). Used to find the real client for password throttling; "
+        "0 uses the socket peer.",
+    )
+    seed_demo_run: bool = Field(
+        default=False,
+        description="Start one auto-approved sample run on the demo lane when the database is "
+        "empty, so a fresh public deployment has a finished run to explore.",
+    )
 
     # --- Demo / failure simulation -------------------------------------------------------------
     demo_failures: str = Field(

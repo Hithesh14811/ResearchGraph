@@ -111,6 +111,20 @@ async def _guard_live_run(services: AppServices, research_id: str, token: str | 
         _require_live(services, token)
 
 
+def _client_key(request: Request, trusted_proxy_hops: int) -> str:
+    """The client address used for throttling.
+
+    Behind N trusted proxies, the N-th X-Forwarded-For entry from the right is the address the
+    outermost trusted proxy saw; everything left of it is supplied by the client and spoofable.
+    """
+    if trusted_proxy_hops:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        if len(hops) >= trusted_proxy_hops:
+            return hops[-trusted_proxy_hops]
+    return request.client.host if request.client else "unknown"
+
+
 def _limiter(request: Request) -> AttemptLimiter:
     limiter: AttemptLimiter | None = getattr(request.app.state, "live_limiter", None)
     if limiter is None:
@@ -151,7 +165,7 @@ async def unlock_live_mode(
     if not settings.live_mode_available or settings.live_mode_password is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Live mode is not enabled on this server")
     limiter = _limiter(request)
-    client = request.client.host if request.client else "unknown"
+    client = _client_key(request, settings.trusted_proxy_hops)
     if limiter.blocked(client):
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed attempts; try again later"
@@ -246,7 +260,10 @@ async def replan(
 
 
 @router.post("/research/{research_id}/cancel", response_model=RunResponse, tags=["research"])
-async def cancel_research(research_id: str, services: Services) -> RunResponse:
+async def cancel_research(
+    research_id: str, services: Services, x_live_token: LiveToken = None
+) -> RunResponse:
+    await _guard_live_run(services, research_id, x_live_token)  # visitors can't stop a live run
     await services.manager.cancel(research_id)
     return _to_response(await _get_run(services, research_id))
 

@@ -30,6 +30,8 @@ from langgraph.types import Command, StreamMode
 from researchgraph.config.settings import Settings
 from researchgraph.core.errors import InvalidRunStateError, RunNotFoundError, TooManyRunsError
 from researchgraph.database.repository import ResearchRepository
+from researchgraph.demo.faults import parse_scenarios
+from researchgraph.demo.scenarios import SAMPLE_QUESTIONS
 from researchgraph.graph.context import ResearchContext
 from researchgraph.graph.progress import NODE_PROGRESS, NODE_STAGE
 from researchgraph.graph.state import append_unique, merge_by_id, merge_sources
@@ -154,6 +156,25 @@ class RunManager:
         }
         self._start(research_id, graph_input, failure_scenarios, live=live)
         return research_id
+
+    async def seed_demo_run(self) -> str | None:
+        """Start one auto-approved sample run (all failure scenarios) if there are no runs yet.
+
+        A fresh public deployment then opens with a finished run to explore instead of an
+        empty history. Only the offline demo lane is used, so seeding never spends credits.
+        """
+        if not (self.settings.is_mock_llm or self.settings.live_gate_enabled):
+            logger.warning("SEED_DEMO_RUN ignored: no offline demo lane on this server")
+            return None
+        _, total = await self.repo.list_runs(limit=1, offset=0)
+        if total:
+            return None
+        return await self.create_run(
+            SAMPLE_QUESTIONS[0].question,
+            auto_approve=True,
+            failure_scenarios=parse_scenarios("all"),
+            live=False,
+        )
 
     async def get_plan(self, research_id: str) -> ResearchPlan | None:
         snapshot = await self.graph.aget_state(self._config(research_id))
@@ -437,8 +458,11 @@ class RunManager:
             )
             current = await self.repo.get_run(research_id)
             if current is not None and RunStatus(current.status).is_terminal:
+                # Finished runs keep nothing in memory (a later event reloads its seq from the DB).
                 self._views.pop(research_id, None)
                 self._contexts.pop(research_id, None)
+                self._seq.pop(research_id, None)
+                self._transition_locks.pop(research_id, None)
                 await context.index.release(research_id)
 
     async def _finalize(self, research_id: str, values: Mapping[str, Any]) -> None:

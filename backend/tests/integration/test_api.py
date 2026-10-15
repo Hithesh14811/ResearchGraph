@@ -156,6 +156,17 @@ async def test_request_validation_and_limits(client: httpx.AsyncClient) -> None:
     big = {"question": "x" * 300_000}
     assert (await client.post("/research", json=big)).status_code == 413
 
+    async def chunked() -> AsyncIterator[bytes]:  # no Content-Length to check up front
+        yield b'{"question": "'
+        for _ in range(40):
+            yield b"x" * 8192
+        yield b'"}'
+
+    response = await client.post(
+        "/research", content=chunked(), headers={"Content-Type": "application/json"}
+    )
+    assert response.status_code == 413
+
 
 async def test_failure_simulation_via_api(client: httpx.AsyncClient, services: AppServices) -> None:
     body = {

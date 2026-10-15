@@ -570,7 +570,8 @@ class DemoResponder:
                 "Every finding is tied to quoted evidence",
                 "Primary research is weighted above blogs and forums",
             ],
-            summary=f"Reviewed {len(findings)} findings against {len(evidence)} cited evidence items; {len(issues)} issue(s) raised.",
+            # Rule-based checks add their own issues later, so this counts only the model's review.
+            summary=f"Model review of {len(findings)} findings against {len(evidence)} cited evidence items raised {len(issues)} issue(s).",
             verdict=verdict,
         ).model_dump(mode="json")
 
