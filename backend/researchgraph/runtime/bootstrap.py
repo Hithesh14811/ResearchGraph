@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -11,7 +12,7 @@ from typing import Any
 from langgraph.graph.state import CompiledStateGraph
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from researchgraph.config.observability import configure_tracing
+from researchgraph.config.observability import configure_langfuse, configure_tracing
 from researchgraph.config.settings import Settings
 from researchgraph.database.checkpointer import open_checkpointer
 from researchgraph.database.engine import create_engine, init_models, session_factory
@@ -41,6 +42,7 @@ async def open_services(
     settings: Settings, *, recover: bool | None = None
 ) -> AsyncIterator[AppServices]:
     tracing = configure_tracing(settings)
+    langfuse = configure_langfuse(settings)
     engine = create_engine(settings.database_url)
     await init_models(engine)
     repository = ResearchRepository(session_factory(engine))
@@ -55,6 +57,7 @@ async def open_services(
                 repository=repository,
                 container=container,
                 broker=broker,
+                langfuse=langfuse,
             )
             services = AppServices(
                 settings=settings,
@@ -74,6 +77,9 @@ async def open_services(
                 yield services
             finally:
                 await manager.shutdown()
+                if langfuse is not None:
+                    # After the drain, so the spans of the final supersteps are sent too.
+                    await asyncio.to_thread(langfuse.flush)
     finally:
         await container.aclose()
         await engine.dispose()

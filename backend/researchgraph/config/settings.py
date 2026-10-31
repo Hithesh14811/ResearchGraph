@@ -134,6 +134,11 @@ class Settings(BaseSettings):
     langchain_project: str = "researchgraph"
     langchain_endpoint: str | None = None
 
+    # --- Observability (Langfuse; on when both keys are set) ----------------------------------
+    langfuse_public_key: SecretStr | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+
     # --- API ---------------------------------------------------------------------------------
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080"
     api_token: SecretStr | None = Field(
@@ -221,6 +226,10 @@ class Settings(BaseSettings):
     @property
     def tracing_enabled(self) -> bool:
         return bool(self.langchain_tracing_v2 and self.langchain_api_key)
+
+    @property
+    def langfuse_enabled(self) -> bool:
+        return self.langfuse_public_key is not None and self.langfuse_secret_key is not None
 
 
 @lru_cache

@@ -138,7 +138,7 @@ Deeper documentation:
 | API | FastAPI, Server-Sent Events, Pydantic v2 |
 | Storage | PostgreSQL + pgvector (SQLite + in-memory vectors for local development), SQLAlchemy 2.0 async |
 | Frontend | React 19, TypeScript, Vite, Tailwind |
-| Ops | Docker Compose, GitHub Actions, optional LangSmith tracing |
+| Ops | Docker Compose, GitHub Actions, optional LangSmith and Langfuse tracing |
 
 ## Demo mode and live mode
 
@@ -310,6 +310,30 @@ docker compose up --build
 
 This starts PostgreSQL + pgvector, the API (http://localhost:8000/docs) and the dashboard (http://localhost:8080).
 In-flight runs get 30 seconds to drain to a checkpoint on `docker compose stop`.
+
+## Observability
+
+Both tracers are optional, independent and can run together. Each one turns on only when it is fully configured;
+a missing key or package logs one line at startup and the run continues untraced.
+
+**LangSmith** traces every graph run, node, LLM call and tool call:
+
+```bash
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=...
+LANGCHAIN_PROJECT=researchgraph   # optional
+```
+
+**Langfuse** is attached as a LangChain callback handler on each run, so it sees every LLM call, including those
+from parallel workers. All calls of one research run share a single trace, even across the plan-approval pause or a
+server restart, and the run id is the Langfuse session id. Buffered traces are flushed on graceful shutdown.
+
+```bash
+pip install -e ".[langfuse]"      # already included in ".[all]"
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=https://cloud.langfuse.com   # or https://us.cloud.langfuse.com, or a self-hosted URL
+```
 
 ## API
 

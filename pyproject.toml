@@ -39,7 +39,8 @@ dependencies = [
 openai = ["langchain-openai>=1.0"]
 anthropic = ["langchain-anthropic>=1.0"]
 pgvector = ["langchain-postgres>=0.0.15", "pgvector>=0.3"]
-all = ["researchgraph[openai,anthropic,pgvector]"]
+langfuse = ["langfuse>=3.12"]
+all = ["researchgraph[openai,anthropic,pgvector,langfuse]"]
 dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",

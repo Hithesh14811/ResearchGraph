@@ -21,12 +21,14 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphDrained
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import RunControl
 from langgraph.types import Command, StreamMode
 
+from researchgraph.config.observability import LangfuseTracing
 from researchgraph.config.settings import Settings
 from researchgraph.core.errors import InvalidRunStateError, RunNotFoundError, TooManyRunsError
 from researchgraph.database.repository import ResearchRepository
@@ -98,12 +100,14 @@ class RunManager:
         repository: ResearchRepository,
         container: ServiceContainer,
         broker: EventBroker,
+        langfuse: LangfuseTracing | None = None,
     ) -> None:
         self.settings = settings
         self.graph = graph
         self.repo = repository
         self.container = container
         self.broker = broker
+        self.langfuse = langfuse
         self._active: dict[str, _ActiveRun] = {}
         self._views: dict[str, _RunView] = {}
         self._contexts: dict[str, ResearchContext] = {}  # reused across resumes (e.g. fault state)
@@ -275,16 +279,23 @@ class RunManager:
 
     # ------------------------------------------------------------------ execution
     def _config(self, research_id: str, tracker: UsageTracker | None = None) -> RunnableConfig:
+        metadata: dict[str, Any] = {"research_id": research_id}
         config: RunnableConfig = {
             "configurable": {"thread_id": research_id},
             "recursion_limit": self.settings.graph_recursion_limit,
             "max_concurrency": self.settings.max_parallel_workers,
             "run_name": "researchgraph",
             "tags": ["researchgraph"],
-            "metadata": {"research_id": research_id},
+            "metadata": metadata,
         }
         if tracker is not None:
-            config["callbacks"] = [tracker]
+            callbacks: list[BaseCallbackHandler] = [tracker]
+            # Callbacks propagate to every node, worker subgraph and LLM call of the run.
+            handler = self.langfuse.callback(research_id) if self.langfuse else None
+            if handler is not None:
+                callbacks.append(handler)
+                metadata["langfuse_session_id"] = research_id
+            config["callbacks"] = callbacks
         return config
 
     def _start(

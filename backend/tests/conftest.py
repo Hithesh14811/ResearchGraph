@@ -37,6 +37,9 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
         "database_url": f"sqlite+aiosqlite:///{(tmp_path / 'test.db').as_posix()}",
         "resume_runs_on_startup": False,
         "langchain_tracing_v2": False,
+        # Keys exported in a developer's shell must never send test runs to Langfuse.
+        "langfuse_public_key": None,
+        "langfuse_secret_key": None,
         "log_level": "WARNING",
     }
     values.update(overrides)
