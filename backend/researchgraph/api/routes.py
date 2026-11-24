@@ -139,6 +139,7 @@ async def health(services: Services) -> HealthResponse:
     return HealthResponse(
         status="ok",
         version=__version__,
+        commit=s.git_commit,
         environment=s.environment,
         llm_provider=lane.llm_provider,
         model=lane.model_name,

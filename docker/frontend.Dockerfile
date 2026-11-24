@@ -5,6 +5,8 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend ./
+# Commit this image was built from; stamped into index.html as <meta name="revision">.
+ARG GIT_COMMIT=""
 RUN npm run build
 
 FROM nginx:1.27-alpine

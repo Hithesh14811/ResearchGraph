@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SearchProviderName = Literal["mock", "auto", "tavily", "arxiv", "semantic_scholar"]
@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     environment: Literal["development", "production", "test"] = "development"
     log_level: str = "INFO"
     log_json: bool = False
+    # Commit of the running build, reported by /health so the deploy pipeline can confirm a
+    # rollout. Baked into the Docker images as GIT_COMMIT; Render sets RENDER_GIT_COMMIT.
+    git_commit: str | None = Field(
+        default=None, validation_alias=AliasChoices("git_commit", "render_git_commit")
+    )
 
     # --- LLM provider (any provider supported by langchain's init_chat_model) -------------
     llm_provider: str = Field(

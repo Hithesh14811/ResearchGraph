@@ -283,6 +283,8 @@ export interface WorkflowEvent {
 export interface Health {
   status: string;
   version: string;
+  /** Git commit of the running API build, when known. */
+  commit: string | null;
   environment: string;
   llm_provider: string;
   model: string;

@@ -84,6 +84,20 @@ def test_serde_allowlist_covers_schema_types_and_roundtrips() -> None:
     assert restored["sources"]["S-9"] == source
 
 
+def test_git_commit_comes_from_the_image_or_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    from researchgraph.config.settings import Settings
+
+    monkeypatch.delenv("GIT_COMMIT", raising=False)
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+    assert Settings(_env_file=None).git_commit is None  # type: ignore[call-arg]
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "a1b2c3d")
+    assert Settings(_env_file=None).git_commit == "a1b2c3d"  # type: ignore[call-arg]
+    monkeypatch.setenv("GIT_COMMIT", "e4f5a6b")  # the image's own stamp wins
+    assert Settings(_env_file=None).git_commit == "e4f5a6b"  # type: ignore[call-arg]
+    monkeypatch.setenv("GIT_COMMIT", "")  # an empty build arg means unknown, not ""
+    assert Settings(_env_file=None).git_commit == "a1b2c3d"  # type: ignore[call-arg]
+
+
 def test_env_example_loads_and_blank_values_mean_unset() -> None:
     from pathlib import Path
 

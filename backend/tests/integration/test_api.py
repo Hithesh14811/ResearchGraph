@@ -33,6 +33,7 @@ async def test_health_and_graph(client: httpx.AsyncClient) -> None:
         health["status"] == "ok"
         and health["llm_provider"] == "mock"
         and health["database"] == "sqlite"
+        and "commit" in health
     )
     mermaid = (await client.get("/graph")).json()["mermaid"]
     assert "plan_review" in mermaid and "research_worker" in mermaid and "quality_gate" in mermaid

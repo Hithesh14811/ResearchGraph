@@ -151,6 +151,7 @@ class LiveModeInfo(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     version: str
+    commit: str | None = Field(default=None, description="Git commit of the running build.")
     environment: str
     llm_provider: str
     model: str

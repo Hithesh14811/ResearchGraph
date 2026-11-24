@@ -12,12 +12,13 @@ Every sentence in its reports is tied to a quote that was verified against a sto
 
 **[Live demo](https://researchgraph-z8r1.onrender.com)** · [API docs](https://researchgraph-api-n4ij.onrender.com/docs) · [Example report](docs/examples/live-report-deepseek.md)
 
+[![CI/CD](https://github.com/Hithesh14811/ResearchGraph/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/Hithesh14811/ResearchGraph/actions/workflows/ci-cd.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![LangGraph 1.2](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![PostgreSQL + pgvector](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
-![Tests: 122](https://img.shields.io/badge/tests-122-success)
+![Tests: 128](https://img.shields.io/badge/tests-128-success)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 </div>
@@ -138,7 +139,7 @@ Deeper documentation:
 | API | FastAPI, Server-Sent Events, Pydantic v2 |
 | Storage | PostgreSQL + pgvector (SQLite + in-memory vectors for local development), SQLAlchemy 2.0 async |
 | Frontend | React 19, TypeScript, Vite, Tailwind |
-| Ops | Docker Compose, GitHub Actions, optional LangSmith and Langfuse tracing |
+| Ops | Docker Compose, GitHub Actions CI/CD, GitHub Container Registry, Render, optional LangSmith and Langfuse tracing |
 
 ## Demo mode and live mode
 
@@ -311,6 +312,14 @@ docker compose up --build
 This starts PostgreSQL + pgvector, the API (http://localhost:8000/docs) and the dashboard (http://localhost:8080).
 In-flight runs get 30 seconds to drain to a checkpoint on `docker compose stop`.
 
+Every green build on `main` also publishes both images to GitHub Container Registry, tagged `latest` and
+`sha-<commit>`:
+
+```bash
+docker pull ghcr.io/hithesh14811/researchgraph-api:latest
+docker pull ghcr.io/hithesh14811/researchgraph-dashboard:latest
+```
+
 ## Observability
 
 Both tracers are optional, independent and can run together. Each one turns on only when it is fully configured;
@@ -376,7 +385,7 @@ mypy
 cd frontend && npm run build               # strict TypeScript + production build
 ```
 
-There are 122 tests (84 unit, 38 integration), and none of them call a real API. The integration suite covers:
+There are 128 tests (85 unit, 43 integration), and none of them call a real API. The integration suite covers:
 
 - the full workflow for every sample question, and every failure scenario
 - plan approval surviving a simulated restart, and drain-on-shutdown with resume-on-startup
@@ -384,14 +393,63 @@ There are 122 tests (84 unit, 38 integration), and none of them call a real API.
   (exactly one wins)
 - a full run on real PostgreSQL + pgvector
 
-CI (GitHub Actions) runs:
+All of these run on every push and pull request; see [CI/CD](#cicd).
 
-- lint, type checks and tests
-- the Postgres suite against a pgvector service
-- the demo with every failure injected
-- the evaluation harness
-- the frontend build
-- both Docker image builds
+## CI/CD
+
+One GitHub Actions workflow, [`ci-cd.yml`](.github/workflows/ci-cd.yml), takes every change from commit to
+production. Pull requests stop after CI. On `main`, a green build publishes the Docker images, deploys that exact
+commit to Render and confirms production is serving it.
+
+```mermaid
+flowchart LR
+    subgraph CI["CI · every push and pull request"]
+        direction TB
+        B["Backend<br/>ruff · mypy · pytest"]
+        P["PostgreSQL + pgvector<br/>integration tests"]
+        D["Demo + evaluation<br/>smoke run"]
+        F["Frontend<br/>typecheck · build"]
+        I["Docker images<br/>build · boot check"]
+        C["Docker Compose<br/>full-stack research run"]
+    end
+    subgraph CD["CD · main only"]
+        direction TB
+        G["Publish images<br/>GHCR · SBOM · provenance"]
+        R["Deploy to Render<br/>pinned to the commit"]
+        V["Verify rollout<br/>smoke-test production"]
+        G --> R --> V
+    end
+    CI --> CD
+```
+
+| Stage | What it checks or does |
+|---|---|
+| Lint and types | Ruff lint and format check, mypy |
+| Tests | The offline suite (mock LLM and search), plus the PostgreSQL suite against a real pgvector service container |
+| Behaviour | The demo with every failure scenario injected, and the evaluation harness (results kept as a build artifact) |
+| Frontend | Strict TypeScript and the production Vite build |
+| Containers | Both images build with a shared layer cache, the API container boots and answers `/health`, and the full Compose stack completes a research run through the nginx proxy |
+| Publish | Pushes both images to GHCR as `sha-<commit>` and `latest` (plus `1.2.3` and `1.2` for version tags), with an SBOM and build provenance |
+| Deploy | Triggers Render deploy hooks pinned to the tested commit, inside a `production` GitHub environment that allows one deploy at a time |
+| Verify | Waits until the API and the dashboard both report the new commit, then smoke-tests the live API and dashboard |
+
+Implementation details:
+
+- **Every build knows its commit.** The API reports it as `commit` in `/health` and the dashboard carries it in
+  `<meta name="revision">`. A deploy counts as done only when production serves the new commit, not when the deploy
+  was requested.
+- **Only tested code ships.** Publish and deploy depend on every CI job, and the deploy hook targets the exact commit
+  CI ran on. A newer push can't slip into production on the back of an older green run.
+- **Safe concurrency.** Superseded pull-request runs are cancelled. Runs on `main` always finish, so a deploy is never
+  cut off halfway.
+- **Rollback.** Re-running the deploy job of an earlier green run redeploys that commit. Every commit's images also
+  stay in GHCR under `sha-<commit>`.
+- **Releases.** Pushing a tag like `v1.0.0` runs the same checks and publishes versioned images.
+
+The deploy job reads two repository secrets, `RENDER_API_DEPLOY_HOOK` and `RENDER_DASHBOARD_DEPLOY_HOOK` (each
+service's deploy hook URL from its Render settings). Pinning a deploy to a commit turns off Render's own
+auto-deploy for that service, so the pipeline becomes the only way code reaches production. Without the secrets the
+job falls back to Render's auto-deploy and still verifies the rollout.
 
 ## Project layout
 
@@ -409,6 +467,8 @@ backend/researchgraph/
 └── demo/         synthetic corpus, mock responder, fault injection
 frontend/         React dashboard
 evaluation/       datasets and the evaluation harness
+docker/           Dockerfiles and the nginx config
+.github/          CI/CD pipeline
 docs/             architecture, design decisions, example reports
 ```
 
